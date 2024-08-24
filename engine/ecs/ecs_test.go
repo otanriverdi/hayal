@@ -187,3 +187,84 @@ func TestGetComponent(t *testing.T) {
 		}
 	})
 }
+
+func TestQuery(t *testing.T) {
+	type transform struct {
+		x int
+		y int
+	}
+	var transformId uint16 = 1
+
+	type name struct {
+		name string
+	}
+	var nameId uint16 = 2
+
+	type velocity struct {
+		velocity int
+	}
+	var velocityId uint16 = 3
+
+	t.Run("returns correct entity for no match", func(t *testing.T) {
+		ecs := New()
+		entityId, err := ecs.CreateEntity()
+		if err != nil {
+			t.Log(err)
+			t.Fail()
+		}
+
+		ecs.AddComponent(entityId, transformId, transform{})
+		ecs.AddComponent(entityId, velocityId, velocity{})
+
+		secondEntityId, err := ecs.CreateEntity()
+		if err != nil {
+			t.Log(err)
+			t.Fail()
+		}
+		ecs.AddComponent(secondEntityId, nameId, name{})
+
+		results := ecs.Query(transformId, velocityId)
+
+		if len(results) != 1 {
+			t.Log(len(results))
+			t.Fail()
+		}
+
+		if results[0] != entityId {
+			t.Log(results[0])
+			t.Fail()
+		}
+	})
+
+	t.Run("returns correct entity for partial match", func(t *testing.T) {
+		ecs := New()
+		entityId, err := ecs.CreateEntity()
+		if err != nil {
+			t.Log(err)
+			t.Fail()
+		}
+
+		ecs.AddComponent(entityId, transformId, transform{})
+		ecs.AddComponent(entityId, velocityId, velocity{})
+
+		secondEntityId, err := ecs.CreateEntity()
+		if err != nil {
+			t.Log(err)
+			t.Fail()
+		}
+		ecs.AddComponent(secondEntityId, nameId, name{})
+		ecs.AddComponent(secondEntityId, transformId, transform{})
+
+		results := ecs.Query(transformId, velocityId)
+
+		if len(results) != 1 {
+			t.Log(len(results))
+			t.Fail()
+		}
+
+		if results[0] != entityId {
+			t.Log(results[0])
+			t.Fail()
+		}
+	})
+}

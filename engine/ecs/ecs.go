@@ -140,6 +140,29 @@ func (ecs *Ecs) RemoveComponent(entityId EntityId, cmpId ComponentId) error {
 	return nil
 }
 
+func (ecs *Ecs) Query(cmpIds ...ComponentId) []EntityId {
+	entities := make([]EntityId, 0)
+
+	for i := uintptr(0); i < ecs.activeCount; i++ {
+		entityId := ecs.activeEntities[i]
+		entityType := ecs.entityTypes[entityId]
+
+		matches := true
+		for _, cmpId := range cmpIds {
+			if !cmpBit(entityType, cmpId) {
+				matches = false
+				break
+			}
+		}
+
+		if matches {
+			entities = append(entities, entityId)
+		}
+	}
+
+	return entities
+}
+
 func GetEcsComponent[T any](ecs *Ecs, entityId EntityId, cmpId ComponentId) (*T, error) {
 	if !cmpBit(ecs.entityTypes[entityId], cmpId) {
 		return nil, ErrComponentNotSlotted
