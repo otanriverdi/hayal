@@ -33,7 +33,9 @@ var (
 	ErrComponentSizeTooBig     = errors.New("component size exceeds limit")
 	ErrComponentNotSlotted     = errors.New("component not slotted")
 	ErrEntityNotFound          = errors.New("entity not found")
-	ErrMaxCapacity             = errors.New("max entity capacity")
+	ErrComponentNotFound       = errors.New("component not found")
+	ErrMaxEntityCapacity       = errors.New("max entity capacity")
+	ErrMaxComponentCapacity    = errors.New("max component capacity")
 )
 
 type Ecs struct {
@@ -47,10 +49,13 @@ type Ecs struct {
 	entityTypes [MaxEntitites]TypeId
 
 	storage [MaxComponents][MaxComponentSize * MaxEntitites]uint8
+
+	cmpCount    uint16
+	cmpRegistry map[reflect.Type]ComponentId
 }
 
 func New() Ecs {
-	return Ecs{}
+	return Ecs{cmpRegistry: make(map[reflect.Type]ComponentId)}
 }
 
 func (ecs *Ecs) CreateEntity() (EntityId, error) {
@@ -64,7 +69,7 @@ func (ecs *Ecs) CreateEntity() (EntityId, error) {
 		ecs.entityCount++
 	} else {
 		// EntityId of max uint32 is used as an invalid ID since it can't be assigned due to above condition
-		return ^EntityId(0), ErrMaxCapacity
+		return ^EntityId(0), ErrMaxEntityCapacity
 	}
 
 	ecs.activeEntities[ecs.activeCount] = entityId
@@ -90,7 +95,44 @@ func (ecs *Ecs) DestroyEntity(entityId EntityId) error {
 	return ErrEntityNotFound
 }
 
-func (ecs *Ecs) AddComponent(entityId EntityId, cmpId ComponentId, data any) error {
+func (ecs *Ecs) ensureComponentId(data any) (ComponentId, error) {
+	cmpType := reflect.TypeOf(data)
+	if cmpType.Kind() == reflect.Ptr {
+		cmpType = cmpType.Elem() 
+	}
+	cmpId, found := ecs.cmpRegistry[cmpType]
+	if !found {
+		if ecs.cmpCount >= MaxComponents {
+			return ^ComponentId(0), ErrMaxComponentCapacity
+		}
+
+		cmpId = ecs.cmpCount
+		ecs.cmpRegistry[cmpType] = ecs.cmpCount
+		ecs.cmpCount++
+	}
+
+	return cmpId, nil
+}
+
+func (ecs *Ecs) getComponentId(data any) (ComponentId, error) {
+	cmpType := reflect.TypeOf(data)
+	if cmpType.Kind() == reflect.Ptr {
+		cmpType = cmpType.Elem() 
+	}
+	cmpId, found := ecs.cmpRegistry[cmpType]
+	if !found {
+		return 0, ErrComponentNotFound
+	}
+
+	return cmpId, nil
+}
+
+func (ecs *Ecs) AddComponent(entityId EntityId, data any) error {
+	cmpId, err := ecs.ensureComponentId(data)
+	if err != nil {
+		return err
+	}
+
 	if cmpBit(ecs.entityTypes[entityId], cmpId) {
 		return ErrComponentAlreadySlotted
 	}
@@ -126,11 +168,14 @@ func (ecs *Ecs) AddComponent(entityId EntityId, cmpId ComponentId, data any) err
 	return nil
 }
 
-func (ecs *Ecs) RemoveComponent(entityId EntityId, cmpId ComponentId) error {
+func (ecs *Ecs) RemoveComponent(entityId EntityId, data any) error {
+	cmpId, err := ecs.getComponentId(data)
+	if err != nil {
+		return err
+	}
 	if !cmpBit(ecs.entityTypes[entityId], cmpId) {
 		return ErrComponentNotSlotted
 	}
-
 	if entityId >= MaxEntitites {
 		return ErrEntityOutOfBounds
 	}
@@ -140,8 +185,17 @@ func (ecs *Ecs) RemoveComponent(entityId EntityId, cmpId ComponentId) error {
 	return nil
 }
 
-func (ecs *Ecs) Query(cmpIds ...ComponentId) []EntityId {
+func (ecs *Ecs) Query(data ...any) ([]EntityId, error) {
 	entities := make([]EntityId, 0)
+
+	cmpIds := make([]ComponentId, len(data))
+	for _, d := range data {
+		cmpId, err := ecs.getComponentId(d)
+		if err != nil {
+			return nil, err
+		}
+		cmpIds = append(cmpIds, cmpId)
+	}
 
 	for i := uintptr(0); i < ecs.activeCount; i++ {
 		entityId := ecs.activeEntities[i]
@@ -160,10 +214,14 @@ func (ecs *Ecs) Query(cmpIds ...ComponentId) []EntityId {
 		}
 	}
 
-	return entities
+	return entities, nil
 }
 
-func GetEcsComponent[T any](ecs *Ecs, entityId EntityId, cmpId ComponentId) (*T, error) {
+func GetEcsComponent[T any](ecs *Ecs, entityId EntityId, data T) (*T, error) {
+	cmpId, err := ecs.getComponentId(data)
+	if err != nil {
+		return nil, err
+	}
 	if !cmpBit(ecs.entityTypes[entityId], cmpId) {
 		return nil, ErrComponentNotSlotted
 	}

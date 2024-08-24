@@ -65,7 +65,6 @@ func TestComponents(t *testing.T) {
 		x int
 	}
 
-	var cmpId uint16 = 1
 	ecs := New()
 
 	entityId, err := ecs.CreateEntity()
@@ -76,7 +75,7 @@ func TestComponents(t *testing.T) {
 
 	t.Run("adds component by passing a value", func(t *testing.T) {
 		cmp := transform{}
-		err = ecs.AddComponent(entityId, cmpId, &cmp)
+		err = ecs.AddComponent(entityId, &cmp)
 		if err != nil {
 			t.Log(err)
 			t.Fail()
@@ -90,7 +89,7 @@ func TestComponents(t *testing.T) {
 			t.Fail()
 		}
 		cmp := transform{}
-		err = ecs.AddComponent(newEntityId, cmpId, cmp)
+		err = ecs.AddComponent(newEntityId, cmp)
 		if err != nil {
 			t.Log(err)
 			t.Fail()
@@ -103,7 +102,7 @@ func TestComponents(t *testing.T) {
 			t.Log(err)
 			t.Fail()
 		}
-		err = ecs.AddComponent(newEntityId, cmpId, transform{})
+		err = ecs.AddComponent(newEntityId, transform{})
 		if err != nil {
 			t.Log(err)
 			t.Fail()
@@ -111,12 +110,11 @@ func TestComponents(t *testing.T) {
 	})
 
 	t.Run("validates component size", func(t *testing.T) {
-		var oversizeCmpId uint16 = 2
 		type oversized struct {
 			arr [65]byte
 		}
 		cmp := oversized{}
-		err = ecs.AddComponent(entityId, oversizeCmpId, cmp)
+		err = ecs.AddComponent(entityId, cmp)
 		if err == nil {
 			t.Fail()
 		}
@@ -128,7 +126,7 @@ func TestComponents(t *testing.T) {
 
 	t.Run("doesnt allow duplicate components", func(t *testing.T) {
 		cmp := transform{}
-		err = ecs.AddComponent(entityId, cmpId, cmp)
+		err = ecs.AddComponent(entityId, cmp)
 		if err == nil {
 			t.Fail()
 		}
@@ -140,7 +138,7 @@ func TestComponents(t *testing.T) {
 	})
 
 	t.Run("removes component", func(t *testing.T) {
-		err = ecs.RemoveComponent(entityId, cmpId)
+		err = ecs.RemoveComponent(entityId, transform{})
 		if err != nil {
 			t.Log(err)
 			t.Fail()
@@ -154,7 +152,6 @@ func TestGetComponent(t *testing.T) {
 		y int
 	}
 
-	var cmpId uint16 = 1
 	ecs := New()
 
 	entityId, err := ecs.CreateEntity()
@@ -167,12 +164,12 @@ func TestGetComponent(t *testing.T) {
 		x := 10
 		y := 15
 		tr := transform{x, y}
-		err = ecs.AddComponent(entityId, cmpId, tr)
+		err = ecs.AddComponent(entityId, tr)
 		if err != nil {
 			t.Log(err)
 			t.Fail()
 		}
-		cmp, err := GetEcsComponent[transform](&ecs, entityId, cmpId)
+		cmp, err := GetEcsComponent(&ecs, entityId, transform{})
 		if err != nil {
 			t.Log(err)
 			t.Fail()
@@ -193,17 +190,14 @@ func TestQuery(t *testing.T) {
 		x int
 		y int
 	}
-	var transformId uint16 = 1
 
 	type name struct {
 		name string
 	}
-	var nameId uint16 = 2
 
 	type velocity struct {
 		velocity int
 	}
-	var velocityId uint16 = 3
 
 	t.Run("returns correct entity for no match", func(t *testing.T) {
 		ecs := New()
@@ -213,17 +207,21 @@ func TestQuery(t *testing.T) {
 			t.Fail()
 		}
 
-		ecs.AddComponent(entityId, transformId, transform{})
-		ecs.AddComponent(entityId, velocityId, velocity{})
+		ecs.AddComponent(entityId, transform{})
+		ecs.AddComponent(entityId, velocity{})
 
 		secondEntityId, err := ecs.CreateEntity()
 		if err != nil {
 			t.Log(err)
 			t.Fail()
 		}
-		ecs.AddComponent(secondEntityId, nameId, name{})
+		ecs.AddComponent(secondEntityId, name{})
 
-		results := ecs.Query(transformId, velocityId)
+		results, err := ecs.Query(transform{}, velocity{})
+		if err != nil {
+			t.Log(err)
+			t.Fail()
+		}
 
 		if len(results) != 1 {
 			t.Log(len(results))
@@ -244,18 +242,22 @@ func TestQuery(t *testing.T) {
 			t.Fail()
 		}
 
-		ecs.AddComponent(entityId, transformId, transform{})
-		ecs.AddComponent(entityId, velocityId, velocity{})
+		ecs.AddComponent(entityId, transform{})
+		ecs.AddComponent(entityId, velocity{})
 
 		secondEntityId, err := ecs.CreateEntity()
 		if err != nil {
 			t.Log(err)
 			t.Fail()
 		}
-		ecs.AddComponent(secondEntityId, nameId, name{})
-		ecs.AddComponent(secondEntityId, transformId, transform{})
+		ecs.AddComponent(secondEntityId, name{})
+		ecs.AddComponent(secondEntityId, transform{})
 
-		results := ecs.Query(transformId, velocityId)
+		results, err := ecs.Query(transform{}, velocity{})
+		if err != nil {
+			t.Log(err)
+			t.Fail()
+		}
 
 		if len(results) != 1 {
 			t.Log(len(results))
