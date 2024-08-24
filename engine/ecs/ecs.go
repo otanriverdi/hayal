@@ -49,16 +49,8 @@ type Ecs struct {
 	storage [MaxComponents][MaxComponentSize * MaxEntitites]uint8
 }
 
-func setBit(mask *TypeId, bit ComponentId) {
-	*mask |= (1 << bit)
-}
-
-func clearBit(mask *TypeId, bit ComponentId) {
-	*mask &= ^(1 << bit)
-}
-
-func cmpBit(mask TypeId, bit ComponentId) bool {
-	return (mask & (1 << bit)) != 0
+func New() Ecs {
+	return Ecs{}
 }
 
 func (ecs *Ecs) CreateEntity() (EntityId, error) {
@@ -74,6 +66,9 @@ func (ecs *Ecs) CreateEntity() (EntityId, error) {
 		// EntityId of max uint32 is used as an invalid ID since it can't be assigned due to above condition
 		return ^EntityId(0), ErrMaxCapacity
 	}
+
+	ecs.activeEntities[ecs.activeCount] = entityId
+	ecs.activeCount++
 
 	return entityId, nil
 }
@@ -95,7 +90,7 @@ func (ecs *Ecs) DestroyEntity(entityId EntityId) error {
 	return ErrEntityNotFound
 }
 
-func (ecs *Ecs) AddComponent(entityId EntityId, cmpId ComponentId, data *any) error {
+func (ecs *Ecs) AddComponent(entityId EntityId, cmpId ComponentId, data any) error {
 	if cmpBit(ecs.entityTypes[entityId], cmpId) {
 		return ErrComponentAlreadySlotted
 	}
@@ -104,23 +99,29 @@ func (ecs *Ecs) AddComponent(entityId EntityId, cmpId ComponentId, data *any) er
 		return ErrEntityOutOfBounds
 	}
 
-	cmpSize := reflect.TypeOf(data).Elem().Size()
+	cmpType := reflect.TypeOf(data)
+	cmpSize := cmpType.Size()
 	if cmpSize > MaxComponentSize {
 		return ErrComponentSizeTooBig
 	}
 
-	setBit(&ecs.entityTypes[entityId], cmpId)
+	// Data can be either a pointer or a direct value
+	var dataPtr unsafe.Pointer
+	switch cmpType.Kind() {
+	case reflect.Ptr:
+		dataPtr = unsafe.Pointer(reflect.ValueOf(data).Pointer())
+	default:
+		dataValue := reflect.New(cmpType).Elem()
+		dataValue.Set(reflect.ValueOf(data))
+		dataPtr = unsafe.Pointer(dataValue.Addr().Pointer())
+	}
 
-	// Go does not allow converting generic types into byte arrays so we cast it into an unsafe pointer
-	dataPtr := unsafe.Pointer(data)
-	// We get a slice of bytes that represents the component data
 	dataSlice := (*[MaxComponentSize]byte)(dataPtr)[:cmpSize:cmpSize]
-	// We calculate the offset of this component data that will be sloted into the storage buffer
 	offset := entityId * MaxComponentSize
-	// Get the slice of the storage buffer that is the slot for this component data
 	storageSlice := ecs.storage[cmpId][offset : offset+uint32(cmpSize)]
-	// Copy component data
 	copy(storageSlice, dataSlice)
+
+	setBit(&ecs.entityTypes[entityId], cmpId)
 
 	return nil
 }
@@ -135,5 +136,23 @@ func (ecs *Ecs) RemoveComponent(entityId EntityId, cmpId ComponentId) error {
 	}
 
 	clearBit(&ecs.entityTypes[entityId], cmpId)
+
 	return nil
+}
+
+func GetEcsComponent[T any](ecs *Ecs, entityId EntityId, cmpId ComponentId) (*T, error) {
+	if !cmpBit(ecs.entityTypes[entityId], cmpId) {
+		return nil, ErrComponentNotSlotted
+	}
+
+	if entityId >= MaxEntitites {
+		return nil, ErrEntityOutOfBounds
+	}
+
+	cmpSize := int(reflect.TypeOf((*T)(nil)).Elem().Size())
+	offset := entityId * MaxComponentSize
+	slice := ecs.storage[cmpId][offset : offset+uint32(cmpSize)]
+	ptr := unsafe.Pointer(&slice[0])
+
+	return (*T)(ptr), nil
 }
