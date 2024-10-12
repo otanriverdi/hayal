@@ -55,10 +55,11 @@ func (ecs *ECS) Spawn(cmp any) (entity, error) {
 		return 0, err
 	}
 	bitmap := buildBitmap(cmpId)
-	err = ecs.insertRow(id, bitmap, cmp)
+	ref, err := ecs.insertRow(id, bitmap, cmp)
 	if err != nil {
 		return 0, err
 	}
+	ecs.entityIndex[id] = ref;
 	return id, nil
 }
 
@@ -83,10 +84,11 @@ func (ecs *ECS) AddComponent(entity entity, cmp any) error {
 	}
 	bitmap := setBitmap(ref.bitmap, cmpId)
 	cmps := append(ref.row, cmp)
-	err = ecs.insertRow(entity, bitmap, cmps...)
+	newRef, err := ecs.insertRow(entity, bitmap, cmps...)
 	if err != nil {
 		return err
 	}
+	ecs.entityIndex[entity] = newRef;
 	ecs.deleteRow(ref.bitmap, ref.idx)
 	return nil
 }
@@ -113,10 +115,11 @@ func (ecs *ECS) RemoveComponent(entity entity, cmp any) error {
 		}
 	}
 	cmps := append(ref.row[0:cmpIdx], ref.row[cmpIdx+1:len(ref.row)]...)
-	err = ecs.insertRow(entity, bitmap, cmps...)
+	newRef, err := ecs.insertRow(entity, bitmap, cmps...)
 	if err != nil {
 		return err
 	}
+	ecs.entityIndex[entity] = newRef;
 	ecs.deleteRow(ref.bitmap, ref.idx)
 	return nil
 }
@@ -158,21 +161,20 @@ func (ecs *ECS) deleteRow(bitmap bitmap, idx int) {
 	a.entities = append(a.entities[0:idx], a.entities[idx+1:len(a.entities)]...)
 }
 
-func (ecs *ECS) insertRow(entity entity, bitmap bitmap, cmps ...any) error {
+func (ecs *ECS) insertRow(entity entity, bitmap bitmap, cmps ...any) (entityRef, error) {
 	a := ecs.ensureArchetype(bitmap)
 	row := make([]any, len(cmps))
 	for _, cmp := range cmps {
 		cmpId, err := getCmpId(cmp)
 		if err != nil {
-			return err
+			return entityRef{}, err
 		}
 		idx := a.cmpIndices[cmpId]
 		row[idx] = cmp
 	}
 	a.entities = append(a.entities, row)
 	idx := len(a.entities) - 1
-	ecs.entityIndex[entity] = entityRef{row: a.entities[idx], idx: idx, bitmap: bitmap}
-	return nil
+	return entityRef{row: a.entities[idx], idx: idx, bitmap: bitmap}, nil
 }
 
 func (ecs *ECS) ensureArchetype(bitmap bitmap) *archetype {
