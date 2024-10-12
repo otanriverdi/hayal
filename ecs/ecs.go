@@ -132,15 +132,17 @@ func (ecs *ECS) Query(cmps ...any) (func(yield func(QueryResult) bool), error) {
 	}
 	queryBitmap := buildBitmap(cmpIds...)
 	return func(yield func(QueryResult) bool) {
-		for _, a := range ecs.archetypes {
+		for i := range ecs.archetypes {
+			a := &ecs.archetypes[i]
 			if !bitmapIsSubset(queryBitmap, a.bitmap) {
 				continue
 			}
-			for idx, components := range a.entities {
+			for idx := range a.entities {
+				components := a.entities[idx]
 				qr := QueryResult{
 					components:   components,
 					cmpIndices:   a.cmpIndices,
-					archetype:    &a,
+					archetype:    a,
 					archetypeIdx: idx,
 				}
 				if !yield(qr) {
