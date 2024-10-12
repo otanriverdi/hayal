@@ -16,7 +16,8 @@ func TestEcs(t *testing.T) {
 		ecs := New()
 		id, err := ecs.Spawn(5)
 		assert.NoError(t, err)
-		entity, ok := ecs.entityIndex[id]
+		entityVal, ok := ecs.entityIndex.Load(id)
+		entity := entityVal.(entityRef)
 		assert.True(t, ok)
 		assert.Equal(t, entity.row[0].(int), 5)
 		assert.Len(t, ecs.archetypes, 1)
@@ -30,7 +31,7 @@ func TestEcs(t *testing.T) {
 		assert.NoError(t, err)
 		err = ecs.Destroy(id)
 		assert.NoError(t, err)
-		_, ok := ecs.entityIndex[id]
+		_, ok := ecs.entityIndex.Load(id)
 		assert.False(t, ok)
 		assert.Len(t, ecs.archetypes, 1)
 		assert.Len(t, ecs.archetypes[0].entities, 0)

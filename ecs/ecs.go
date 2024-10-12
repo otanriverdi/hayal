@@ -22,6 +22,7 @@ type archetype struct {
 	bitmap     bitmap
 	entities   [][]any
 	cmpIndices map[componentId]int
+	mu sync.Mutex
 }
 
 type entity = uint64
@@ -36,14 +37,14 @@ type entityRef struct {
 
 type ECS struct {
 	archetypes     []archetype
-	archetypeIndex map[bitmap]int
-	entityIndex    map[entity]entityRef
+	archetypeIndex sync.Map 
+	entityIndex    sync.Map 
+	// For archetypes array
+	mu sync.RWMutex
 }
 
 func New() ECS {
 	return ECS{
-		archetypeIndex: make(map[bitmap]int),
-		entityIndex:    make(map[entity]entityRef),
 		archetypes:     make([]archetype, 0),
 	}
 }
@@ -59,25 +60,26 @@ func (ecs *ECS) Spawn(cmp any) (entity, error) {
 	if err != nil {
 		return 0, err
 	}
-	ecs.entityIndex[id] = ref;
+	ecs.entityIndex.Store(id, ref);
 	return id, nil
 }
 
 func (ecs *ECS) Destroy(entity entity) error {
-	ref, ok := ecs.entityIndex[entity]
+	refVal, ok := ecs.entityIndex.LoadAndDelete(entity)
 	if !ok {
 		return errors.New("Entity not found")
 	}
+	ref := refVal.(entityRef)
 	ecs.deleteRow(ref.bitmap, ref.idx)
-	delete(ecs.entityIndex, entity)
 	return nil
 }
 
 func (ecs *ECS) AddComponent(entity entity, cmp any) error {
-	ref, ok := ecs.entityIndex[entity]
+	refVal, ok := ecs.entityIndex.Load(entity)
 	if !ok {
 		return errors.New("Entity not found")
 	}
+	ref := refVal.(entityRef)
 	cmpId, err := getCmpId(cmp)
 	if err != nil {
 		return err
@@ -88,16 +90,17 @@ func (ecs *ECS) AddComponent(entity entity, cmp any) error {
 	if err != nil {
 		return err
 	}
-	ecs.entityIndex[entity] = newRef;
+	ecs.entityIndex.Store(entity, newRef);
 	ecs.deleteRow(ref.bitmap, ref.idx)
 	return nil
 }
 
 func (ecs *ECS) RemoveComponent(entity entity, cmp any) error {
-	ref, ok := ecs.entityIndex[entity]
+	refVal, ok := ecs.entityIndex.Load(entity)
 	if !ok {
 		return errors.New("Entity not found")
 	}
+	ref := refVal.(entityRef)
 	cmpId, err := getCmpId(cmp)
 	if err != nil {
 		return err
@@ -119,7 +122,7 @@ func (ecs *ECS) RemoveComponent(entity entity, cmp any) error {
 	if err != nil {
 		return err
 	}
-	ecs.entityIndex[entity] = newRef;
+	ecs.entityIndex.Store(entity, newRef);
 	ecs.deleteRow(ref.bitmap, ref.idx)
 	return nil
 }
@@ -158,11 +161,15 @@ func (ecs *ECS) Query(cmps ...any) (func(yield func(QueryResult) bool), error) {
 
 func (ecs *ECS) deleteRow(bitmap bitmap, idx int) {
 	a := ecs.ensureArchetype(bitmap)
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.entities = append(a.entities[0:idx], a.entities[idx+1:len(a.entities)]...)
 }
 
 func (ecs *ECS) insertRow(entity entity, bitmap bitmap, cmps ...any) (entityRef, error) {
 	a := ecs.ensureArchetype(bitmap)
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	row := make([]any, len(cmps))
 	for _, cmp := range cmps {
 		cmpId, err := getCmpId(cmp)
@@ -178,18 +185,21 @@ func (ecs *ECS) insertRow(entity entity, bitmap bitmap, cmps ...any) (entityRef,
 }
 
 func (ecs *ECS) ensureArchetype(bitmap bitmap) *archetype {
-	idx, ok := ecs.archetypeIndex[bitmap]
+	idxVal, ok := ecs.archetypeIndex.Load(bitmap)
 	if !ok {
+		ecs.mu.Lock()
+		defer ecs.mu.Unlock()
 		cmpIds := extractBitmapCmps(bitmap)
 		cmpIndices := make(map[componentId]int)
 		for idx, cmpId := range cmpIds {
 			cmpIndices[cmpId] = idx
 		}
-		atype := archetype{bitmap: bitmap, entities: make([][]any, 0), cmpIndices: cmpIndices}
-		ecs.archetypes = append(ecs.archetypes, atype)
-		idx = len(ecs.archetypes) - 1
-		ecs.archetypeIndex[bitmap] = idx
+		ecs.archetypes = append(ecs.archetypes, archetype{bitmap: bitmap, entities: make([][]any, 0), cmpIndices: cmpIndices})
+		idx := len(ecs.archetypes) - 1
+		idxVal = idx
+		ecs.archetypeIndex.Store(bitmap, idx)
 	}
+	idx := idxVal.(int)
 	return &ecs.archetypes[idx]
 }
 

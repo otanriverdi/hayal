@@ -99,8 +99,7 @@ type Game struct {
 
 // New initializes a new game.
 func New() Game {
-	e := ecs.New()
-	return Game{ctx: &gameCtx{ECS: e}}
+	return Game{ctx: &gameCtx{ECS: ecs.New()}}
 }
 
 // AddSystem adds a system to the schedule to be executed in various steps of the game loop. Check GameLoopStep*
