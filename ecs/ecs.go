@@ -121,7 +121,7 @@ func (ecs *ECS) RemoveComponent(entity entity, cmp any) error {
 	return nil
 }
 
-func (ecs *ECS) Query(cmps ...any) (func(yield func(queryResult) bool), error) {
+func (ecs *ECS) Query(cmps ...any) (func(yield func(QueryResult) bool), error) {
 	cmpIds := make([]uint32, len(cmps))
 	for i, cmp := range cmps {
 		cmpId, err := getCmpId(cmp)
@@ -131,13 +131,13 @@ func (ecs *ECS) Query(cmps ...any) (func(yield func(queryResult) bool), error) {
 		cmpIds[i] = cmpId
 	}
 	queryBitmap := buildBitmap(cmpIds...)
-	return func(yield func(queryResult) bool) {
+	return func(yield func(QueryResult) bool) {
 		for _, a := range ecs.archetypes {
 			if !bitmapIsSubset(queryBitmap, a.bitmap) {
 				continue
 			}
 			for idx, components := range a.entities {
-				qr := queryResult{
+				qr := QueryResult{
 					components:   components,
 					cmpIndices:   a.cmpIndices,
 					archetype:    &a,
@@ -202,14 +202,14 @@ func getCmpId(cmp any) (componentId, error) {
 	return id, nil
 }
 
-type queryResult struct {
+type QueryResult struct {
 	components []any
 	cmpIndices    map[componentId]int
 	archetype *archetype
 	archetypeIdx int
 }
 
-func GetComponent[C any](qr *queryResult) (C, error) {
+func GetComponent[C any](qr *QueryResult) (C, error) {
 	var zero C
 	cmpId, err := getCmpId(zero)
 	if err != nil {
@@ -229,7 +229,7 @@ func GetComponent[C any](qr *queryResult) (C, error) {
 	return component, nil
 }
 
-func SetComponent(qr *queryResult, cmp any) error {
+func SetComponent(qr *QueryResult, cmp any) error {
 	cmpId, err := getCmpId(cmp)
 	if err != nil {
 		return err
