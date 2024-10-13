@@ -22,7 +22,7 @@ type archetype struct {
 	bitmap     bitmap
 	entities   [][]any
 	cmpIndices map[componentId]int
-	mu sync.Mutex
+	mu         sync.Mutex
 }
 
 type entity = uint64
@@ -37,15 +37,15 @@ type entityRef struct {
 
 type ECS struct {
 	archetypes     []archetype
-	archetypeIndex sync.Map 
-	entityIndex    sync.Map 
+	archetypeIndex sync.Map
+	entityIndex    sync.Map
 	// For archetypes array
 	mu sync.RWMutex
 }
 
 func New() ECS {
 	return ECS{
-		archetypes:     make([]archetype, 0),
+		archetypes: make([]archetype, 0),
 	}
 }
 
@@ -60,7 +60,7 @@ func (ecs *ECS) Spawn(cmp any) (entity, error) {
 	if err != nil {
 		return 0, err
 	}
-	ecs.entityIndex.Store(id, ref);
+	ecs.entityIndex.Store(id, ref)
 	return id, nil
 }
 
@@ -90,7 +90,7 @@ func (ecs *ECS) AddComponent(entity entity, cmp any) error {
 	if err != nil {
 		return err
 	}
-	ecs.entityIndex.Store(entity, newRef);
+	ecs.entityIndex.Store(entity, newRef)
 	ecs.deleteRow(ref.bitmap, ref.idx)
 	return nil
 }
@@ -122,7 +122,7 @@ func (ecs *ECS) RemoveComponent(entity entity, cmp any) error {
 	if err != nil {
 		return err
 	}
-	ecs.entityIndex.Store(entity, newRef);
+	ecs.entityIndex.Store(entity, newRef)
 	ecs.deleteRow(ref.bitmap, ref.idx)
 	return nil
 }
@@ -217,9 +217,9 @@ func getCmpId(cmp any) (componentId, error) {
 }
 
 type QueryResult struct {
-	components []any
-	cmpIndices    map[componentId]int
-	archetype *archetype
+	components   []any
+	cmpIndices   map[componentId]int
+	archetype    *archetype
 	archetypeIdx int
 }
 

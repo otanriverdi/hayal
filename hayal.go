@@ -1,4 +1,4 @@
-// Package hayal provides an experimental ecs based game engine. 
+// Package hayal provides an experimental ecs based game engine.
 //
 //
 // To the Game struct, you can assign systems to be executed in various steps of the game engine, that would initialize
@@ -8,14 +8,14 @@
 //	game.AddSystem(hayal.GameLoopStepUpdate, system)
 //	game.Run()
 //
-// The system functions have access to a gameCtx that can be used to interface with the game world. 
+// The system functions have access to a gameCtx that can be used to interface with the game world.
 //
 //  func System(ctx *gameCtx) {
 //    e, err := ctx.Spawn(transform{x: 5, y: 10})
 //    if err != nil {
 //      return err
 //    }
-//    
+//
 //    err = ctx.Destroy(e)
 //    if err != nil {
 //      return err
@@ -58,15 +58,6 @@ import (
 	"github.com/otanriverdi/hayal/ecs"
 )
 
-type gameCtx struct {
-	ecs.ECS
-	exit chan struct{}
-}
-
-func (ctx *gameCtx) Exit() {
-	close(ctx.exit)
-}
-
 type gameLoopStep = uint
 
 const (
@@ -82,6 +73,15 @@ const (
 	// GameLoopStateDeinit runs once before exit. Use this for cleanup.
 	GameLoopStateDeinit
 )
+
+type gameCtx struct {
+	ecs.ECS
+	exit chan struct{}
+}
+
+func (ctx *gameCtx) Exit() {
+	close(ctx.exit)
+}
 
 type SystemCtx interface {
 	ecs.SystemCtx
@@ -125,6 +125,12 @@ func (g *Game) Run() {
 			g.executeStep(GameLoopStateDraw)
 		}
 	}
+}
+
+type Plugin = func(g *Game)
+
+func (g *Game) Plug(plugin Plugin) {
+	plugin(g)
 }
 
 func (g *Game) executeStep(step gameLoopStep) {
